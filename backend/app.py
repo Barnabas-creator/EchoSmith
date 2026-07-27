@@ -188,6 +188,9 @@ async def create_task_from_local(
     body = await request.json()
     path = body.get("path", "").strip()
     language = body.get("language", "zh")
+    auto_export_formats = [
+        fmt for fmt in body.get("auto_export_formats", []) if fmt in ("txt", "srt", "json")
+    ]
 
     if not path:
         raise HTTPException(status_code=400, detail="路径不能为空")
@@ -202,6 +205,7 @@ async def create_task_from_local(
         "name": file_path.name,
         "path": str(file_path),
         "language": language,
+        "auto_export_formats": auto_export_formats,
     }
 
     record = TaskRecord(id=task_id, status=TaskStatus.QUEUED, source=source_info)
@@ -481,6 +485,30 @@ async def _run_task(task_id: str, source_info: dict, cleanup_paths: list[str]) -
             if updated is None:
                 # Task was deleted, exit gracefully
                 return
+
+            formats = source_info.get("auto_export_formats") or []
+            if source_info.get("type") == "local" and formats:
+                try:
+                    written = _auto_export_to_source(
+                        Path(source_info["path"]), updated, formats
+                    )
+                    await task_store.update_task(
+                        task_id,
+                        log={
+                            "timestamp": time.time(),
+                            "type": "info",
+                            "message": f"已自动保存到源文件目录: {', '.join(p.name for p in written)}",
+                        },
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    await task_store.update_task(
+                        task_id,
+                        log={
+                            "timestamp": time.time(),
+                            "type": "error",
+                            "message": f"自动保存到源文件目录失败: {exc}",
+                        },
+                    )
     except Exception as exc:  # noqa: BLE001
         import traceback
         print(f"[TASK ERROR] {task_id}: {exc}", flush=True)
@@ -636,25 +664,18 @@ def _ms_to_timestamp(ms: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{millis:03d}"
 
 
-@app.get("/api/tasks/{task_id}/export")
-async def export_task(
-    task_id: str, format: str = "txt", _: None = Depends(verify_token)
-):
-    try:
-        record = await task_store.get_task(task_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="任务不存在") from exc
-
-    format = format.lower()
+def _build_export_content(record: TaskRecord, format: str) -> str:
+    """Render a task's result as txt/json/srt text. Shared by the export
+    endpoint and the backend-side auto-export-to-source-folder path."""
     if format == "txt":
-        return PlainTextResponse(record.result_text or "", media_type="text/plain")
+        return record.result_text or ""
     if format == "json":
-        return JSONResponse(
-            {
-                "id": record.id,
-                "text": record.result_text,
-                "segments": record.segments,
-            }
+        import json as _json
+
+        return _json.dumps(
+            {"id": record.id, "text": record.result_text, "segments": record.segments},
+            ensure_ascii=False,
+            indent=2,
         )
     if format == "srt":
         segments = record.segments
@@ -669,10 +690,53 @@ async def export_task(
                         "text": text,
                     }
                 ]
-        srt_body = _segments_to_srt(segments)
-        return PlainTextResponse(srt_body, media_type="application/x-subrip")
+        return _segments_to_srt(segments)
+    raise ValueError(f"不支持的导出格式: {format}")
 
-    raise HTTPException(status_code=400, detail="不支持的导出格式")
+
+def _auto_export_to_source(
+    source_path: Path, record: TaskRecord, formats: list[str]
+) -> list[Path]:
+    """Write the completed transcript next to the original media file.
+
+    Runs entirely in the (unsandboxed) Python backend process, so it is not
+    subject to the desktop shell's filesystem access-scope restrictions —
+    unlike writing from the frontend, this works no matter which drive or
+    folder the source file lives in.
+    """
+    written: list[Path] = []
+    for fmt in formats:
+        content = _build_export_content(record, fmt)
+        target = source_path.with_suffix(f".{fmt}")
+        target.write_text(content, encoding="utf-8")
+        written.append(target)
+    return written
+
+
+@app.get("/api/tasks/{task_id}/export")
+async def export_task(
+    task_id: str, format: str = "txt", _: None = Depends(verify_token)
+):
+    try:
+        record = await task_store.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="任务不存在") from exc
+
+    format = format.lower()
+    if format == "json":
+        return JSONResponse(
+            {"id": record.id, "text": record.result_text, "segments": record.segments}
+        )
+
+    media_types = {"txt": "text/plain", "srt": "application/x-subrip"}
+    if format not in media_types:
+        raise HTTPException(status_code=400, detail="不支持的导出格式")
+
+    try:
+        content = _build_export_content(record, format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PlainTextResponse(content, media_type=media_types[format])
 
 
 @app.post("/api/download")

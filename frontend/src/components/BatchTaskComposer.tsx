@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { UploadIcon, PlayIcon, FileAudioIcon, XIcon, CheckIcon } from "lucide-react";
 
 import { Button } from "./ui/button";
-import { createTaskFromFile, createTaskFromPath, autoExportTask } from "../lib/api";
+import { createTaskFromFile, createTaskFromPath } from "../lib/api";
 import { useTasksStore } from "../hooks/useTasksStore";
 
 type ExportFormat = "txt" | "srt" | "json";
@@ -31,6 +31,9 @@ export function BatchTaskComposer(): JSX.Element {
   const abortControllerRef = useRef<AbortController | null>(null);
   const [wasInterrupted, setWasInterrupted] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  // Tracks the task id we last auto-selected, so a manual pick in the task
+  // dropdown (TaskStreamPanel) doesn't get yanked away when the next file starts.
+  const lastAutoSelectedTaskId = useRef<string | null>(null);
 
   const upsertTask = useTasksStore((state) => state.upsertTask);
   const setActiveTask = useTasksStore((state) => state.setActiveTask);
@@ -159,9 +162,11 @@ export function BatchTaskComposer(): JSX.Element {
             )
           );
 
-          // Create task — use direct path when available (avoids file corruption)
+          // Create task — use direct path when available (avoids file corruption).
+          // Local-path tasks carry the export formats so the backend can save
+          // the result next to the source file once transcription finishes.
           const taskId = batchFile.path
-            ? await createTaskFromPath(batchFile.path)
+            ? await createTaskFromPath(batchFile.path, "zh", Array.from(exportFormats))
             : await createTaskFromFile(batchFile.file);
 
           // Check again after async operation
@@ -193,7 +198,14 @@ export function BatchTaskComposer(): JSX.Element {
             updated_at: Date.now() / 1000,
           });
 
-          setActiveTask(taskId);
+          // Only follow the newly started task if the user hasn't manually
+          // picked a different (e.g. earlier, completed) task in the dropdown —
+          // otherwise this would yank their selection away every few seconds.
+          const currentActiveId = useTasksStore.getState().activeTaskId;
+          if (currentActiveId === null || currentActiveId === lastAutoSelectedTaskId.current) {
+            setActiveTask(taskId);
+          }
+          lastAutoSelectedTaskId.current = taskId;
 
           // Wait for task to complete
           await waitForTaskCompletion(taskId);
@@ -212,29 +224,12 @@ export function BatchTaskComposer(): JSX.Element {
             return;
           }
 
-          // Auto-export if we have a file path (don't block status update)
-          if (batchFile.path && exportFormats.size > 0) {
-            console.log(`[BatchExport] Starting auto-export for ${batchFile.file.name}`);
-            console.log(`[BatchExport] Formats:`, Array.from(exportFormats));
-            console.log(`[BatchExport] Source path:`, batchFile.path);
-            try {
-              await autoExportTask(
-                taskId,
-                Array.from(exportFormats),
-                batchFile.path
-              );
-              console.log(`[BatchExport] Auto-export completed for ${batchFile.file.name}`);
-            } catch (exportError) {
-              console.error(`[BatchExport] Auto-export failed for ${batchFile.file.name}:`, exportError);
-              // Don't fail the task, just log the export error
-            }
-          } else {
-            console.warn(`[BatchExport] Skipped auto-export for ${batchFile.file.name}:`, {
-              hasPath: !!batchFile.path,
-              hasFormats: exportFormats.size > 0,
-              path: batchFile.path
-            });
-          }
+          // Auto-export to the source directory now happens in the backend
+          // (see backend/app.py `_run_task`), triggered by the
+          // auto_export_formats passed to createTaskFromPath above. This
+          // avoids the Tauri fs-scope restrictions that made client-side
+          // writes silently fail for source files outside $HOME/$DOWNLOAD/
+          // $DOCUMENT/$DESKTOP.
         } catch (error) {
           console.error(`Failed to process ${batchFile.file.name}:`, error);
           setBatchFiles((prev) =>

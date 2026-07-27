@@ -199,9 +199,17 @@ export async function createTaskFromFile(file: File, language = "zh"): Promise<s
   return response.data.id;
 }
 
-export async function createTaskFromPath(path: string, language = "zh"): Promise<string> {
+export async function createTaskFromPath(
+  path: string,
+  language = "zh",
+  autoExportFormats: Array<"txt" | "srt" | "json"> = []
+): Promise<string> {
   await ensureBackendBase();
-  const response = await apiClient.post<{ id: string }>("/tasks/local", { path, language });
+  const response = await apiClient.post<{ id: string }>("/tasks/local", {
+    path,
+    language,
+    auto_export_formats: autoExportFormats
+  });
   return response.data.id;
 }
 
@@ -338,58 +346,8 @@ export function connectTaskStream(taskId: string): WebSocket {
   return new WebSocket(url);
 }
 
-/**
- * Auto-export completed task to the source file directory
- * NOTE: This function requires fs:scope permissions in Tauri capabilities
- */
-export async function autoExportTask(
-  taskId: string,
-  formats: Array<"txt" | "srt" | "json">,
-  sourceFilePath: string
-): Promise<void> {
-  console.log("[autoExportTask] Starting auto-export", { taskId, formats, sourceFilePath });
-
-  try {
-    const { writeFile } = await import("@tauri-apps/plugin-fs");
-    const { dirname, extname, basename, join } = await import("@tauri-apps/api/path");
-    console.log("[autoExportTask] Tauri plugins imported successfully");
-
-    // Get source file directory and base name
-    const sourceDir = await dirname(sourceFilePath);
-    const sourceExt = await extname(sourceFilePath);
-    const sourceBase = await basename(sourceFilePath, sourceExt);
-    console.log("[autoExportTask] Parsed file paths", { sourceDir, sourceExt, sourceBase });
-
-    // Export each format
-    for (const format of formats) {
-      try {
-        console.log(`[autoExportTask] Exporting ${format} for task ${taskId}`);
-        const blob = await exportTask(taskId, format);
-        const arrayBuffer = await blob.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
-
-        // Clean up format string (remove leading dots if any)
-        const cleanFormat = format.startsWith('.') ? format.slice(1) : format;
-        // Clean up base name (remove trailing dots if any)
-        const cleanBase = sourceBase.replace(/\.+$/, '');
-
-        const outputPath = await join(sourceDir, `${cleanBase}.${cleanFormat}`);
-        console.log(`[autoExportTask] Writing to ${outputPath}`, {
-          sourceDir,
-          cleanBase,
-          cleanFormat,
-          fullPath: outputPath
-        });
-        await writeFile(outputPath, uint8Array);
-        console.log(`[autoExportTask] Successfully wrote ${format} file to ${outputPath}`);
-      } catch (error) {
-        console.error(`[autoExportTask] Failed to export ${format} for task ${taskId}:`, error);
-        throw error;
-      }
-    }
-    console.log("[autoExportTask] All exports completed successfully");
-  } catch (error) {
-    console.error("[autoExportTask] Auto-export failed:", error);
-    throw error;
-  }
-}
+// Auto-export (writing the completed transcript next to the source media
+// file) is now done by the backend in `_run_task` — see backend/app.py.
+// The backend runs unsandboxed, so it isn't limited by the desktop shell's
+// filesystem access-scope, which used to make this silently fail for
+// source files outside $HOME/$DOWNLOAD/$DOCUMENT/$DESKTOP on Windows.
