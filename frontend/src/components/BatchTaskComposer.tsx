@@ -355,6 +355,12 @@ export function BatchTaskComposer(): JSX.Element {
     !mutation.isPending &&
     batchFiles.every((f) => f.status === "completed" || f.status === "failed");
 
+  const doneCount = batchFiles.filter(
+    (f) => f.status === "completed" || f.status === "failed"
+  ).length;
+  const donePercent =
+    batchFiles.length > 0 ? Math.round((doneCount / batchFiles.length) * 100) : 0;
+
   const canStart =
     batchFiles.length > 0 &&
     exportFormats.size > 0 &&
@@ -363,10 +369,10 @@ export function BatchTaskComposer(): JSX.Element {
 
   return (
     <form
-      className="rounded-[20px] border border-black/[0.08] dark:border-white/[0.08] bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_8px_16px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.3),0_8px_24px_rgba(0,0,0,0.4)] hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_24px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_1px_2px_rgba(0,0,0,0.3),0_12px_32px_rgba(0,0,0,0.5)] transition-all duration-300 ease-out p-6 flex flex-col gap-5 h-full min-h-[420px]"
+      className="rounded-[20px] border border-black/[0.08] dark:border-white/[0.08] bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_8px_16px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.3),0_8px_24px_rgba(0,0,0,0.4)] hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_24px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_1px_2px_rgba(0,0,0,0.3),0_12px_32px_rgba(0,0,0,0.5)] transition-all duration-300 ease-out p-6 flex flex-col gap-5 h-full min-h-0 overflow-hidden"
       onSubmit={handleSubmit}
     >
-      <div>
+      <div className="shrink-0">
         <h2 className="text-base font-semibold">批量转写</h2>
         <p className="text-xs text-muted-foreground mt-1">
           选择多个音视频文件，自动转写并保存到源文件目录
@@ -374,7 +380,7 @@ export function BatchTaskComposer(): JSX.Element {
       </div>
 
       {/* Export format selection */}
-      <div>
+      <div className="shrink-0">
         <label className="text-sm font-medium text-gray-900 dark:text-white mb-2 block">
           导出格式
         </label>
@@ -397,9 +403,9 @@ export function BatchTaskComposer(): JSX.Element {
       </div>
 
       {/* File upload area */}
-      <div className="space-y-3">
+      <div className="flex-1 min-h-0 flex flex-col gap-3">
         <div
-          className={`flex flex-col items-center justify-center rounded-[16px] border-2 border-dashed transition-all duration-200 px-5 py-8 text-center cursor-pointer group ${
+          className={`shrink-0 flex flex-col items-center justify-center rounded-[16px] border-2 border-dashed transition-all duration-200 px-5 py-8 text-center cursor-pointer group ${
             isDragging
               ? "border-indigo-400 bg-indigo-50/50 dark:bg-indigo-400/10"
               : "border-black/15 dark:border-white/15 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] hover:border-black/25 dark:hover:border-white/25"
@@ -436,7 +442,7 @@ export function BatchTaskComposer(): JSX.Element {
 
         {/* File list */}
         {batchFiles.length > 0 && (
-          <div className="space-y-2 max-h-[200px] overflow-y-auto">
+          <div className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
             {batchFiles.map((batchFile, index) => (
               <div
                 key={index}
@@ -472,11 +478,24 @@ export function BatchTaskComposer(): JSX.Element {
       </div>
 
       {/* Start button */}
-      <div className="flex items-center gap-3 mt-4">
+      <div className="shrink-0 flex flex-col gap-2 mt-2">
+        {(mutation.isPending || wasInterrupted) && (
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 flex-1 rounded-full bg-black/[0.06] dark:bg-white/[0.10] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                style={{ width: `${donePercent}%` }}
+              />
+            </div>
+            <span className="text-[11px] tabular-nums text-gray-500 dark:text-gray-400 w-10 text-right">
+              {donePercent}%
+            </span>
+          </div>
+        )}
         <Button
           type={allDone ? "button" : "submit"}
           variant="default"
-          className={`gap-2 flex-1 transition-colors duration-500 ${
+          className={`gap-2 w-full transition-colors duration-500 ${
             allDone ? "!bg-emerald-500 hover:!bg-emerald-600 !shadow-none" : ""
           }`}
           disabled={!canStart && !allDone}
@@ -496,7 +515,7 @@ export function BatchTaskComposer(): JSX.Element {
       </div>
 
       {mutation.isError && (
-        <p className="text-xs text-red-600 dark:text-red-400">
+        <p className="shrink-0 text-xs text-red-600 dark:text-red-400">
           {(mutation.error as Error).message || "批量处理失败"}
         </p>
       )}

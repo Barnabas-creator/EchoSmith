@@ -5,9 +5,11 @@
 
   **高性能本地语音转录桌面应用，基于 SenseVoice + sherpa-onnx**
 
+  **本仓库为 Windows 版分支：只发布 Windows 安装包，仅在 Windows 10/11 x64 上测试。**
+
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)](https://github.com/JingZhaoQi/EchoSmith/releases)
-  [![Version](https://img.shields.io/badge/version-1.4.0-green)](https://github.com/JingZhaoQi/EchoSmith/releases)
+  [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-blue)](https://github.com/Barnabas-creator/EchoSmith/releases)
+  [![Version](https://img.shields.io/badge/version-1.4.5-green)](https://github.com/Barnabas-creator/EchoSmith/releases)
 
 </div>
 
@@ -20,7 +22,7 @@
 - **URL 下载** — 粘贴链接直接下载并转写（基于 yt-dlp）
 - **实时进度** — WebSocket 推送转录进度和中间结果
 - **多格式导出** — TXT、SRT 字幕、JSON 三种格式
-- **跨平台** — 支持 macOS（Intel / Apple Silicon）和 Windows
+- **面向 Windows** — 本分支提供 Windows 10 / 11 x64 安装包（NSIS / MSI）
 - **现代界面** — 毛玻璃质感 UI，支持浅色 / 深色模式
 
 ## 性能
@@ -37,21 +39,18 @@
 
 ## 安装
 
-### 下载预编译版本
+### 下载预编译版本（Windows）
 
-前往 [Releases](https://github.com/JingZhaoQi/EchoSmith/releases) 页面下载：
+前往 [Releases](https://github.com/Barnabas-creator/EchoSmith/releases) 页面下载：
 
-| 平台 | 文件 | 说明 |
-|------|------|------|
-| macOS | `EchoSmith_x.x.x_universal.dmg` | Intel + Apple Silicon 通用 |
-| Windows | `EchoSmith_x.x.x_x64-setup.exe` | NSIS 安装包 |
-| Windows | `EchoSmith_x.x.x_x64_en-US.msi` | MSI 安装包 |
+| 文件 | 说明 |
+|------|------|
+| `EchoSmith_x.x.x_x64-setup.exe` | NSIS 安装包，推荐 |
+| `EchoSmith_x.x.x_x64_en-US.msi` | MSI 安装包 |
 
-**macOS 首次运行**：右键点击应用 → 打开（绕过 Gatekeeper），或在终端执行：
+系统要求：Windows 10 / 11 64 位。首次启动 SmartScreen 可能提示未知发行者，点击「更多信息」→「仍要运行」即可。
 
-```bash
-xattr -cr /Applications/EchoSmith.app
-```
+macOS 用户请使用上游仓库 [JingZhaoQi/EchoSmith](https://github.com/JingZhaoQi/EchoSmith/releases) 的 DMG。
 
 ### 从源码构建
 
@@ -66,7 +65,7 @@ xattr -cr /Applications/EchoSmith.app
 
 ```bash
 # 克隆仓库
-git clone https://github.com/JingZhaoQi/EchoSmith.git
+git clone https://github.com/Barnabas-creator/EchoSmith.git
 cd EchoSmith
 
 # 创建虚拟环境
@@ -87,14 +86,13 @@ cd tauri && pnpm tauri dev
 
 #### 构建安装包
 
-```bash
-# macOS DMG
-bash scripts/build_local_dmg.sh
-
+```powershell
 # Windows（在 Windows 上运行）
 powershell scripts/build_backend.ps1
-cd tauri && npm run build
+cd tauri; npm run build
 ```
+
+打 `v*` 标签推送后，GitHub Actions 会自动构建 Windows 安装包并发布到 Releases。
 
 ## 使用说明
 
