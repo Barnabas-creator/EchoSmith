@@ -11,6 +11,8 @@ permissions:
 
 jobs:
   build-macos:
+    # This fork ships Windows builds only; the macOS job stays for upstream parity.
+    if: github.repository == 'JingZhaoQi/EchoSmith'
     runs-on: macos-latest
 
     steps:
@@ -261,7 +263,7 @@ jobs:
             tauri/src-tauri/target/release/bundle/nsis/*.exe
 
   release:
-    needs: [build-macos, build-windows]
+    needs: [build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -278,9 +280,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            echosmith-macos-universal/*
             echosmith-windows/**/*
-          draft: true
+          draft: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
